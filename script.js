@@ -1,10 +1,10 @@
 const canvas = document.getElementsByTagName('canvas')[0];
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+canvas.width = canvas.clientWidth;
+canvas.height = canvas.clientHeight;
 
 document.addEventListener('resize', () => {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
 });
 
 let mouseX = 0, mouseY = 0;
@@ -23,10 +23,10 @@ const id = Math.random().toString(36).substring(2, 11);
 const updatePosition = () => {
   const screenOffsetLeft = window.screenLeft || window.screenX;
   const screenOffsetTop = window.screenTop || window.screenY;
-  const windowWidth = window.innerWidth;
-  const windowHeight = window.innerHeight;
+  const canvasWidth = canvas.clientWidth;
+  const canvasHeight = canvas.clientHeight;
 
-  localStorage.setItem(id, `${screenOffsetLeft},${screenOffsetTop},${windowWidth},${windowHeight}`);
+  localStorage.setItem(id, `${screenOffsetLeft},${screenOffsetTop},${canvasWidth},${canvasHeight}`);
 }
 
 const getPositions = () => {
@@ -52,7 +52,6 @@ const getWorldEdges = () => {
 }
 
 class SoftBodyNode {
-  static #worldEdges = [];
   static #bounce = 0.9;
   static #damping = 0.92;
   static #stiffness = 0.2;
@@ -69,12 +68,12 @@ class SoftBodyNode {
   }
 
   draw() {
-    ctx.save();
-    ctx.fillStyle = '#f88';
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, 4, 0, 2 * Math.PI);
-    ctx.fill();
-    ctx.restore();
+    // ctx.save();
+    // ctx.fillStyle = '#f88';
+    // ctx.beginPath();
+    // ctx.arc(this.x, this.y, 4, 0, 2 * Math.PI);
+    // ctx.fill();
+    // ctx.restore();
   }
 
   update(targetX, targetY) {
@@ -89,7 +88,7 @@ class SoftBodyNode {
     this.x += this.vx;
     this.y += this.vy;
 
-    const [left, right, top, bottom] = SoftBodyNode.#worldEdges;
+    const [left, right, top, bottom] = SoftBody.worldEdges;
     if (this.x < left) {
       this.x = left;
       this.vx *= -SoftBodyNode.#bounce;
@@ -116,15 +115,15 @@ class SoftBodyNode {
       this.ay += dy * force;
     }
   }
-
-  static updateEdges() {
-    SoftBodyNode.#worldEdges = getWorldEdges();
-  }
 }
 
 class SoftBody {
-  static #nodeCount = 12;
-  static #gravity = 0.1;
+  static worldEdges = [];
+
+  static #nodeCount = 30;
+  static #bounce = 0.9;
+  static #follow = 0.98;
+  static #damping = 0.99;
 
   constructor(x, y, radius) {
     this.radius = radius;
@@ -140,6 +139,11 @@ class SoftBody {
 
     this.targetX = x;
     this.targetY = y;
+    this.targetX_V = 0;
+    this.targetY_V = 0;
+    this.targetX_A = 0;
+    this.targetY_A = 0;
+
     this.isGrabbed = false;
     this.isHovered = false;
   }
@@ -163,26 +167,65 @@ class SoftBody {
       this.isHovered = true;
     }
     ctx.fill();
+    ctx.beginPath();
+    ctx.fillStyle = '#f88';
+    ctx.ellipse(this.targetX, this.targetY, 4, 4, 0, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.fillStyle = '#8f8';
+    ctx.ellipse(this.centerX, this.centerY, 4, 4, 0, 0, 2 * Math.PI);
+    ctx.fill();
     ctx.restore();
   }
 
   update() {
+    this.targetX_V += this.targetX_A;
+    this.targetY_V += this.targetY_A;
+
     if (this.isGrabbed) {
-      this.targetX = mouseX;
-      this.targetY = mouseY;
+      const dx = mouseX - this.targetX;
+      const dy = mouseY - this.targetY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      this.targetX_A = dx / distance * SoftBody.#follow;
+      this.targetY_A = dy / distance * SoftBody.#follow;
     } else {
-      this.targetY += SoftBody.#gravity;
+      this.targetX_A = 0;
+      this.targetY_A = 0;
     }
 
-    const centerX = this.nodes.reduce((sum, node) => sum + node.x, 0) / this.nodes.length;
-    const centerY = this.nodes.reduce((sum, node) => sum + node.y, 0) / this.nodes.length;
+    this.targetX_V *= SoftBody.#damping;
+    this.targetY_V *= SoftBody.#damping;
 
-    const dx = this.targetX - centerX;
-    const dy = this.targetY - centerY;
+    this.targetX += this.targetX_V;
+    this.targetY += this.targetY_V;
+
+    const [left, right, top, bottom] = SoftBody.worldEdges;
+    if (this.targetX < left) {
+      this.targetX = left;
+      this.targetX_V *= -SoftBody.#bounce;
+    }
+    if (this.targetX > right) {
+      this.targetX = right;
+      this.targetX_V *= -SoftBody.#bounce;
+    }
+    if (this.targetY < top) {
+      this.targetY = top;
+      this.targetY_V *= -SoftBody.#bounce;
+    }
+    if (this.targetY > bottom) {
+      this.targetY = bottom;
+      this.targetY_V *= -SoftBody.#bounce;
+    }
+
+    this.centerX = this.nodes.reduce((sum, node) => sum + node.x, 0) / this.nodes.length;
+    this.centerY = this.nodes.reduce((sum, node) => sum + node.y, 0) / this.nodes.length;
+
+    const dx = this.targetX - this.centerX;
+    const dy = this.targetY - this.centerY;
     const distance = Math.sqrt(dx * dx + dy * dy);
     const force = distance / 100000;
 
-    SoftBodyNode.updateEdges();
     for (const i in this.nodes) {
       const angle = (i / SoftBody.#nodeCount) * Math.PI * 2;
       const nodeX = this.targetX + this.radius * Math.cos(angle);
@@ -194,12 +237,21 @@ class SoftBody {
       this.nodes[i].update(nodeX, nodeY);
     }
   }
+
+  static updateEdges() {
+    this.worldEdges = getWorldEdges();
+  }
 }
 
 
 let bodies = [];
 
-bodies.push(new SoftBody(100, 100, 50));
+for (let i = 0; i < 9; i++) {
+  const x = Math.random() * canvas.width;
+  const y = Math.random() * canvas.height;
+  const radius = Math.random() * 50 + 20;
+  bodies.push(new SoftBody(x, y, radius));
+}
 
 (function loop() {
   updatePosition();
@@ -209,6 +261,8 @@ bodies.push(new SoftBody(100, 100, 50));
   ctx.restore();
 
 
+  canvas.style.cursor = 'default';
+  SoftBody.updateEdges();
   for (const body of bodies) {
     if (mouseDown && body.isHovered) {
       body.isGrabbed = true;
