@@ -17,3 +17,8 @@ Check out the live demo [here](https://www.mlml.dev/localstorage-window-sync/).
 - **Moving Softbodies**: Use the left mouse button to drag the softbodies around.
 - **Spawning Softbodies**: Use the right mouse button to spawn softbodies.
 - **Window Interaction**: Open multiple windows of the demo and observe the interaction and synchronization between them.
+
+## Video Demo
+If you are on a mobile device or do not want to drag around windows, here is a short video demo of the physics and seamless movement between windows:
+
+https://github.com/0mlml/localstorage-window-sync/assets/63015852/ff953c7b-f45d-4548-8650-ef834a5f7023
